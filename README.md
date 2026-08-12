@@ -12,6 +12,24 @@ This pipeline uses a **Vision-Language Transformer (Grounding DINO)** coupled wi
 
 ---
 
+## File Structure
+
+```
+KL-Road-Anonymizer/
+│
+├── README.md                          # Project documentation
+├── LICENSE                            # MIT License
+│
+├── docs/
+│   └── sample comparison.png          # Side-by-side comparison of original vs anonymized frames
+│
+└── Notebooks/
+    └── v2-0-anonymising-dataset.ipynb # Main processing notebook
+
+```
+
+---
+
 ## Dataset Collection & Preprocessing
 
 The underlying dataset captures real-world driving conditions across diverse Kuala Lumpur roadways (highways, dense city intersections, motorcycle lanes, and suburban streets):
@@ -26,25 +44,9 @@ The underlying dataset captures real-world driving conditions across diverse Kua
 
 Building a privacy filter for Kuala Lumpur road imagery presents unique challenges: high motorcycle density, varied plate formats (black acrylic, square, slanted, custom fonts), extreme camera angles, and high-contrast ambient lighting.
 
+![Sample Comparison](docs/sample%20comparison.png)
 
-```
-
-```
-   Evolution of Anonymization Performance
-
-```
-
-100% ──┐                                   ┌──────────────
-│                                   │ Vision
-75% ──┤                     ┌─────────────┤ Transformers
-│                     │ CNNs        │ (Grounding DINO
-50% ──┤ ┌───────────────────┤ (YOLOv8)    │  + Spatial ROI)
-│ │ Haar Cascades     │             │
-25% ──┤ │ (OpenCV 2001)     │             │
-│ │                   │             │
-0% ──┴─┴───────────────────┴─────────────┴──────────────
-
-```
+*Figure: Side-by-side comparison showing original extracted frames (left) and anonymized outputs (right) with targeted Gaussian blur applied to license plates and human faces/heads.*
 
 ### Phase 1: OpenCV Haar Cascades (Failed)
 * **Approach:** Classical classifiers (`haarcascade_frontalface_default.xml` and `haarcascade_russian_plate_number.xml`).
@@ -108,19 +110,6 @@ To solve this, the pipeline enforces a **Spatial Context Containment Check**:
 
 ```
 
-
----
-
-## Before & After Visual Comparison
-
-Below are qualitative results showing the pipeline operating on frames extracted from the iPhone 14 Pro footage:
-
-| Original Extracted Frame (2 FPS Raw) | Anonymized Output Frame (Targeted Blur) |
-| :---: | :---: |
-| ![Original Frame 1](docs/images/before_01.jpg) | ![Anonymized Frame 1](docs/images/after_01.jpg) |
-| *Raw video frame with visible license plates and riders.* | *Targeted Gaussian blur applied to plates and heads with zero background artifacts.* |
-| ![Original Frame 2](docs/images/before_02.jpg) | ![Anonymized Frame 2](docs/images/after_02.jpg) |
-| *Angled motorcycle tail plate and oncoming traffic.* | *Spatial ROI constraint validates and blurs angled plates without blurring road asphalt.* |
 
 ---
 
