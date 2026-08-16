@@ -10,6 +10,13 @@ This pipeline uses a **Vision-Language Transformer (Grounding DINO)** coupled wi
 
 > **Note on Dataset Availability:** This dataset is currently a **work in progress**. The code and anonymization pipeline are being shared now for community review. Once data curation and final quality checks are finalized, the dataset will be published, and the download link will be updated here.
 
+## Technical Highlights
+
+- Built with PyTorch + Hugging Face Transformers
+- Uses Grounding DINO Vision Transformer
+- Designed a custom spatial ROI filtering algorithm to reduce false positives
+- Hardware acceleration with CUDA and Apple Silicon (MPS)
+- Reproducible research pipeline
 ---
 
 ## File Structure
