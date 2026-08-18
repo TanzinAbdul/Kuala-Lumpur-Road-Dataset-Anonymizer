@@ -3,6 +3,7 @@
 [![Dataset Status](https://img.shields.io/badge/Dataset_Status-Work_In_Progress-orange.svg)](#dataset-publication--roadmap)
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
 [![Model](https://img.shields.io/badge/Model-Grounding_DINO_ViT-green.svg)](https://huggingface.co/IDEA-Research/grounding-dino-base)
+[![arXiv](https://img.shields.io/badge/arXiv-2608.14724-b31b1b.svg)](https://arxiv.org/abs/2608.14724)
 
 An automated, open-source privacy anonymization pipeline designed specifically for urban Southeast Asian road footage (Kuala Lumpur, Malaysia). 
 
@@ -10,13 +11,41 @@ This pipeline uses a **Vision-Language Transformer (Grounding DINO)** coupled wi
 
 > **Note on Dataset Availability:** This dataset is currently a **work in progress**. The code and anonymization pipeline are being shared now for community review. Once data curation and final quality checks are finalized, the dataset will be published, and the download link will be updated here.
 
+---
+
+## 📄 Paper
+
+This work is described in our paper:
+
+> **Privacy-Preserving Dataset Curation for Kuala Lumpur Urban Traffic: Grounded Vision-Language Detection with Spatial Vehicle-Context Filtering**  
+> Mohammed Abdul Al Arafat Tanzin, Rudzidatul Akmam Dziyauddin  
+> arXiv:2608.14724, 2026
+
+[![arXiv](https://img.shields.io/badge/arXiv-2608.14724-b31b1b.svg)](https://arxiv.org/abs/2608.14724)
+
+```bibtex
+@misc{tanzin2026privacypreservingdatasetcurationkuala,
+      title={Privacy-Preserving Dataset Curation for Kuala Lumpur Urban Traffic: Grounded Vision-Language Detection with Spatial Vehicle-Context Filtering}, 
+      author={Mohammed Abdul Al Arafat Tanzin and Rudzidatul Akmam Dziyauddin},
+      year={2026},
+      eprint={2608.14724},
+      archivePrefix={arXiv},
+      primaryClass={cs.CV},
+      url={https://arxiv.org/abs/2608.14724}, 
+}
+```
+
+---
+
 ## Technical Highlights
 
 - Built with PyTorch + Hugging Face Transformers
 - Uses Grounding DINO Vision Transformer
 - Designed a custom spatial ROI filtering algorithm to reduce false positives
-- Hardware acceleration with CUDA and Apple Silicon (MPS)
+- Hardware acceleration with CUDA (multi-GPU support)
+- Batch processing for efficient video anonymization
 - Reproducible research pipeline
+
 ---
 
 ## File Structure
@@ -31,8 +60,62 @@ KL-Road-Anonymizer/
 │   └── sample comparison.png          # Side-by-side comparison of original vs anonymized frames
 │
 └── Notebooks/
-    └── v2-0-anonymising-dataset.ipynb # Main processing notebook
+    ├── v2-0-anonymising-dataset.ipynb # Main processing notebook (images)
+    └── v2-0-anonymising-dataset-video.ipynb      # Video processing notebook (NEW!)
 
+```
+
+---
+
+## 📹 Video Processing Notebook
+
+We've added a **video processing notebook** (`video-anonymisation.ipynb`) that extends the pipeline from images to full video streams. This notebook processes videos at **1080p resolution** and applies the same privacy-preserving anonymization in real-time.
+
+### Video Pipeline Features:
+
+1. **Frame-by-Frame Processing**: Reads video frames, applies detection, and writes anonymized output
+2. **Multi-GPU Acceleration**: Uses `DataParallel` to distribute batch inference across multiple GPUs
+3. **Non-Maximum Suppression (NMS)**: Removes duplicate detections per category with IoU threshold of 0.4
+4. **Batch Processing**: Processes 8 frames simultaneously for optimal GPU utilization
+5. **1080p Output**: Saves anonymized video at 1920×1080 resolution, 30 FPS
+6. **Progress Tracking**: Real-time progress bar with FPS and ETA
+7. **Visual Feedback**: 
+   - 🟢 **Green boxes**: Vehicles with blurred plates
+   - 🔴 **Red boxes**: License plates (blurred inside vehicles)
+   - 🟡 **Yellow boxes**: Blurred faces/heads
+   - Status overlay showing counts and total blurs
+
+### NMS Implementation (IoU-based Duplicate Removal):
+
+The pipeline implements **Non-Maximum Suppression (NMS)** to eliminate multiple overlapping detections of the same object:
+
+1. Detections are sorted by confidence score (highest first)
+2. The box with highest confidence is selected and added to the output
+3. IoU (Intersection over Union) is calculated between the selected box and all remaining boxes:
+   ```
+   IoU = Area_of_Intersection / Area_of_Union
+   ```
+4. Boxes with IoU > 0.4 are considered duplicates and removed
+5. Process repeats until all boxes are processed
+
+This ensures each object has only one bounding box, significantly reducing false positives.
+
+### Video Processing Flow:
+
+```
+Input Video → Frame Extraction → Batch Collection (8 frames)
+    ↓
+Grounding DINO Inference (Multi-GPU)
+    ↓
+NMS (IoU = 0.4)
+    ↓
+Spatial ROI Containment Check
+    ↓
+Gaussian Blurring (Adaptive Kernel)
+    ↓
+Draw ONLY Blurred Regions
+    ↓
+Output Video (1080p, 30 FPS)
 ```
 
 ---
@@ -80,9 +163,28 @@ To solve this, the pipeline enforces a **Spatial Context Containment Check**:
 2. A candidate license plate is **only blurred** if its centroid lies within the bounding box of a detected vehicle (`car`, `motorcycle`, `bus`, `truck`) plus a 10% safety margin.
 3. Detections found on bare road asphalt or background structures are automatically discarded as noise.
 
+### Algorithm Pseudocode:
 
 ```
-            Raw Frame Input (2 FPS)
+Algorithm: Spatial Vehicle ROI Containment Filtering
+
+For each candidate plate detection:
+    1. Compute plate centroid: (cx, cy)
+    2. For each detected vehicle box:
+        3. Expand vehicle box by 10% margin
+        4. If (cx, cy) is inside expanded vehicle box:
+            5. Valid plate → Apply blur
+            6. Break loop
+    7. If no vehicles detected AND plate confidence > 0.35:
+        8. Valid plate → Apply blur (fallback)
+    9. Otherwise:
+        10. Reject as background noise
+```
+
+### Pipeline Flow Diagram:
+
+```
+            Raw Frame Input (Video)
                        │
                        ▼
     ┌─────────────────────────────────────┐
@@ -117,7 +219,6 @@ To solve this, the pipeline enforces a **Spatial Context Containment Check**:
 
 ```
 
-
 ---
 
 ## Features
@@ -125,8 +226,10 @@ To solve this, the pipeline enforces a **Spatial Context Containment Check**:
 * **Zero-Shot Language Grounding:** Uses `IDEA-Research/grounding-dino-base` to catch targets independent of size, rotation, or viewing angle.
 * **Asphalt False-Positive Suppression:** Filters candidate plates by verifying their spatial placement on vehicle ROIs.
 * **Helmet & Head Coverage:** Prompts for `human face` and `head` to catch motorcycle riders wearing helmets or turned away from the camera.
-* **Asymmetric Expansion Padding:** Applies 25% horizontal and 15% vertical bounding box expansion so plate characters along borders do not leak.
-* **Hardware Accelerated:** Automatic detection for CUDA GPUs and Apple Silicon Metal Performance Shaders (`mps`).
+* **Asymmetric Expansion Padding:** Applies 10% horizontal and 50% vertical bounding box expansion for plates (10% uniform for faces) so plate characters along borders do not leak.
+* **Non-Maximum Suppression (NMS):** Removes duplicate detections with IoU threshold of 0.4, ensuring one box per object.
+* **Hardware Accelerated:** Automatic detection for CUDA GPUs (supports multi-GPU via DataParallel).
+* **Video Processing:** Full video anonymization at 1080p, 30 FPS with real-time progress tracking.
 
 ---
 
@@ -134,10 +237,9 @@ To solve this, the pipeline enforces a **Spatial Context Containment Check**:
 
 ### 1. Clone & Install Dependencies
 ```bash
-git clone [https://github.com/your-username/KL-Road-Anonymizer.git](https://github.com/your-username/KL-Road-Anonymizer.git)
+git clone https://github.com/TanzinAbdul/Kuala-Lumpur-Road-Dataset-Anonymizer.git
 cd KL-Road-Anonymizer
 pip install -r requirements.txt
-
 ```
 
 `requirements.txt`:
@@ -149,24 +251,36 @@ transformers
 opencv-python
 pillow
 huggingface_hub
-
+tqdm
 ```
 
-### 2. Run Processing Script
-
-Set your frame input directory and desired output directory in `main.py` (or run directly in Kaggle/Jupyter):
-
-```python
-INPUT_DIR = "/path/to/extracted_frames"
-OUTPUT_DIR = "/path/to/anonymized_frames"
-
-```
-
-Execute the pipeline:
+### 2. Run Image Processing (Notebook)
+Open and run the Jupyter notebook:
 
 ```bash
-python main.py
+jupyter notebook Notebooks/v2-0-anonymising-dataset.ipynb
+```
 
+### 3. Run Video Processing (Notebook)
+For video anonymization:
+
+```bash
+jupyter notebook Notebooks/video-anonymisation.ipynb
+```
+
+### 4. Video Processing Configuration
+
+In the video notebook, you can configure:
+
+```python
+VIDEO_INPUT = "/path/to/video.mov"
+OUTPUT_DIR = "/path/to/output"
+TARGET_WIDTH = 1920
+TARGET_HEIGHT = 1080
+BATCH_SIZE = 8  # Frames per batch (multi-GPU)
+OUTPUT_FPS = 30
+BOX_THRESHOLD = 0.20
+IOU_THRESHOLD = 0.4  # NMS IoU threshold
 ```
 
 ---
@@ -176,6 +290,8 @@ python main.py
 * [x] Record raw Kuala Lumpur road video footage (iPhone 14 Pro)
 * [x] Extract frame sequences at 2 FPS
 * [x] Build Vision-Transformer anonymization pipeline
+* [x] Video processing implementation (1080p, 30 FPS)
+* [x] NMS implementation for duplicate removal
 * [ ] Complete full-dataset anonymization pass
 * [ ] Run manual Quality Control (QC) validation
 * [ ] Publish dataset on public repository (Kaggle / Hugging Face / IEEE DataPort)
@@ -183,11 +299,23 @@ python main.py
 
 ---
 
-## License & Citation
+## Citation
 
-Distributed under the MIT License. See `LICENSE` for details.
+If you use this pipeline or tool in your work, please cite our paper:
 
-If you use this pipeline or tool in your work, please cite:
+```bibtex
+@misc{tanzin2026privacypreservingdatasetcurationkuala,
+      title={Privacy-Preserving Dataset Curation for Kuala Lumpur Urban Traffic: Grounded Vision-Language Detection with Spatial Vehicle-Context Filtering}, 
+      author={Mohammed Abdul Al Arafat Tanzin and Rudzidatul Akmam Dziyauddin},
+      year={2026},
+      eprint={2608.14724},
+      archivePrefix={arXiv},
+      primaryClass={cs.CV},
+      url={https://arxiv.org/abs/2608.14724}, 
+}
+```
+
+Or the dataset citation:
 
 ```bibtex
 @dataset{kl_road_dataset_in_progress,
@@ -195,8 +323,44 @@ If you use this pipeline or tool in your work, please cite:
   title     = {Kuala Lumpur Urban Road Video Dataset for Autonomous Perception},
   year      = {2026},
   note      = {Work in Progress - Dataset Link Coming Soon},
-  url       = {[https://github.com/TanzinAbdul/Kuala-Lumpur-Road-Dataset-Anonymizee](https://github.com/TanzinAbdul/Kuala-Lumpur-Road-Dataset-Anonymize)}
+  url       = {https://github.com/TanzinAbdul/Kuala-Lumpur-Road-Dataset-Anonymizer}
 }
-
-
 ```
+
+---
+
+## License
+
+Distributed under the MIT License. See `LICENSE` for details.
+
+---
+
+## Contact
+
+**Author:** Mohammed Abdul Al Arafat Tanzin  
+**Supervisor:** Dr. Rudzidatul Akmam Dziyauddin  
+**Institution:** Universiti Teknologi Malaysia (UTM)  
+**Email:** tanzinabdul@gmail.com  
+**GitHub:** [@TanzinAbdul](https://github.com/TanzinAbdul)
+
+---
+
+## Acknowledgments
+
+- Grounding DINO team (IDEA-Research) for the vision-language model
+- Hugging Face for the Transformers library
+- Universiti Teknologi Malaysia for research support
+```
+
+## Key Updates Made:
+
+1. **Added arXiv Paper Section**: With badge and BibTeX citation at the top
+2. **Video Processing Notebook Section**: Detailed explanation of the new video pipeline
+3. **NMS Explanation**: Clear description of IoU-based duplicate removal
+4. **Video Pipeline Flow Diagram**: Visual representation of the video processing flow
+5. **Updated Features**: Added video processing, NMS, and expanded padding details
+6. **Updated Installation**: Added `tqdm` to requirements
+7. **Updated Roadmap**: Added video processing and NMS implementation as completed
+8. **Dual Citation**: Both paper and dataset citations included
+9. **Added Contact Section**: With author and supervisor information
+10. **Better Structure**: More organized sections with emoji indicators
